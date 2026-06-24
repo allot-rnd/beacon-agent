@@ -20,7 +20,13 @@ registry="${PKG%%/*}"; repo="${PKG#*/}"
 
 err() { printf 'beacon install: %s\n' "$*" >&2; exit 1; }
 command -v curl >/dev/null 2>&1 || err "curl is required"
-command -v jq   >/dev/null 2>&1 || err "jq is required (parses the OCI manifest)"
+
+# Tiny JSON helpers so we don't depend on jq — keeps the macOS install brew-free
+# (only curl + awk/sed, present by default). json_token pulls .token/.access_token;
+# layer_digest finds the digest of the layer titled $1 — the digest precedes the
+# title within each layer object, so we take the last digest before the title match.
+json_token()   { tr ',' '\n' | sed -nE 's/.*"(access_)?token":"([^"]+)".*/\2/p' | head -1; }
+layer_digest() { awk -v a="$1" '{m=m $0} END{n=index(m,"\"org.opencontainers.image.title\":\""a"\""); if(n>0){pre=substr(m,1,n); while(match(pre,/"digest":"sha256:[0-9a-f]+"/)){d=substr(pre,RSTART,RLENGTH); pre=substr(pre,RSTART+RLENGTH)} gsub(/"digest":"|"/,"",d); print d}}'; }
 
 # --- detect platform -> layer title (matches the release build matrix) ---
 os="$(uname -s)"; arch="$(uname -m)"
@@ -36,10 +42,10 @@ tokurl="https://${registry}/token?service=${registry}&scope=repository:${repo}:p
 # the pipeline (and the assignment) non-zero, which would otherwise abort the script
 # silently before the empty-check below ever runs.
 if [ -n "${BEACON_GH_TOKEN:-}" ]; then
-  tok="$(curl -fsSL -u "beacon-agent:${BEACON_GH_TOKEN}" "$tokurl" | jq -r '.token // .access_token // empty')" \
+  tok="$(curl -fsSL -u "beacon-agent:${BEACON_GH_TOKEN}" "$tokurl" | json_token)" \
     || err "token exchange failed for ${PKG} — check that BEACON_GH_TOKEN has read:packages and isn't expired"
 else
-  tok="$(curl -fsSL "$tokurl" | jq -r '.token // .access_token // empty')" \
+  tok="$(curl -fsSL "$tokurl" | json_token)" \
     || err "token exchange failed for ${PKG} — it should be PUBLIC; if it was made private, set BEACON_GH_TOKEN"
 fi
 [ -n "$tok" ] || err "token endpoint returned no pull token for ${PKG}"
@@ -49,9 +55,9 @@ auth=(-H "Authorization: Bearer ${tok}")
 echo "==> resolving ${PKG}:${TAG}"
 digest="$(curl -fsSL "${auth[@]}" -H "Accept: application/vnd.oci.image.manifest.v1+json" \
   "https://${registry}/v2/${repo}/manifests/${TAG}" \
-  | jq -r --arg n "$asset" '.layers[] | select(.annotations["org.opencontainers.image.title"]==$n) | .digest')" \
+  | layer_digest "$asset")" \
   || err "could not read the manifest for ${PKG}:${TAG}"
-[ -n "$digest" ] && [ "$digest" != "null" ] || err "${PKG}:${TAG} has no ${asset} layer"
+[ -n "$digest" ] || err "${PKG}:${TAG} has no ${asset} layer"
 
 tmp="$(mktemp -d)"; trap 'rm -rf "$tmp"' EXIT
 bin="$tmp/beacon-agent"

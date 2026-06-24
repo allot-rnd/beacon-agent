@@ -8,7 +8,7 @@ artifact `ghcr.io/allot-rnd/beacon-agent`.
 
 ## Install — no token, no login
 
-**macOS / Linux** (needs `curl` + `jq`):
+**macOS / Linux** (needs `curl`):
 ```bash
 curl -fsSL https://raw.githubusercontent.com/allot-rnd/beacon-agent/main/install.sh | bash
 ```
