@@ -1,36 +1,35 @@
 # beacon-agent
 
-**Deploy repo for the Beacon agent.** This repo doesn't hold source — it *publishes*
-the agent. The agent is **built** in the monorepo [`allot-rnd/beacon`](https://github.com/allot-rnd/beacon)
-and **published** here as the GHCR OCI artifact `ghcr.io/allot-rnd/beacon-agent`.
+**Public install entry point for the Beacon agent.** This repo only hosts the
+installer scripts so they can be fetched anonymously — nothing sensitive lives here.
+The agent itself is built and published from the private monorepo
+[`allot-rnd/beacon`](https://github.com/allot-rnd/beacon) as the **public** GHCR
+artifact `ghcr.io/allot-rnd/beacon-agent`.
 
-## Why the split
+## Install — no token, no login
 
-GHCR records package ownership by **whichever repo's token runs the push**. Publishing
-the agent from *this* repo makes the package owned by `allot-rnd/beacon-agent`, so a
-fine-grained `read:packages` PAT scoped to **only this repo** pulls **only the agent** —
-never the board image (`ghcr.io/allot-rnd/beacon`, which stays owned by the monorepo).
-
-## Flow
-
-```
-allot-rnd/beacon (release.yml)            allot-rnd/beacon-agent (publish.yml)
-  build 5 binaries + installers   ─┐
-  upload to GitHub Release         │  repository_dispatch(publish-agent, tag)
-  fire repository_dispatch  ───────┴────────────►  download release binaries
-                                                   oras push → ghcr.io/.../beacon-agent
+**macOS / Linux** (needs `curl` + `jq`):
+```bash
+curl -fsSL https://raw.githubusercontent.com/allot-rnd/beacon-agent/main/install.sh | bash
 ```
 
-## Required secrets
+**Windows** (PowerShell 7+):
+```powershell
+irm https://raw.githubusercontent.com/allot-rnd/beacon-agent/main/install.ps1 | iex
+```
 
-| Repo | Secret | Token (fine-grained) |
-|---|---|---|
-| `allot-rnd/beacon` | `AGENT_PUBLISH_TOKEN` | `allot-rnd/beacon-agent` → Contents: R/W (fire the dispatch) |
-| `allot-rnd/beacon-agent` | `MONOREPO_READ_TOKEN` | `allot-rnd/beacon` → Contents: Read (download the built binaries) |
+The installer detects your OS/CPU, pulls the matching agent binary from the public
+GHCR artifact (anonymously, digest-verified), and registers it as a background
+service that turns on Claude Code telemetry and serves your own dashboard at
+http://localhost:4318/. The agent then auto-updates from the same public artifact —
+**no credential ever**.
 
-(One PAT scoped to both repos, stored in both, also works.)
+## What's private vs public
 
-## Manual publish
+| | |
+|---|---|
+| Source code, board image | 🔒 private — `allot-rnd/beacon` |
+| Agent binary (`ghcr.io/allot-rnd/beacon-agent`) + these installers | 🌐 public |
 
-Actions → **Publish agent OCI artifact** → Run workflow → enter the monorepo release
-tag (e.g. `v0.8.4`).
+The agent binary carries no secrets (the ingest endpoint is internal/VPN-only; the
+per-install token is set at install time, not baked into the binary).
