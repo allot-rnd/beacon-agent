@@ -74,5 +74,16 @@ $got = (Get-FileHash -Algorithm SHA256 $staging).Hash.ToLower()
 if ($got -ne $want) { Remove-Item $staging -Force -ErrorAction SilentlyContinue; throw "checksum mismatch (got $got, want $want)" }
 
 Write-Host '==> installing'
-try { & $staging install }
+try {
+  & $staging install
+  # Sign in with Microsoft SSO (opens a browser, mints BEACON_TOKEN, bakes it in).
+  # Skip with $env:BEACON_NO_LOGIN; non-fatal — the agent still reports without it
+  # unless the board requires a token, and `beacon-agent login` can be run later.
+  if ($env:BEACON_NO_LOGIN) {
+    Write-Host '==> skipping sign-in (BEACON_NO_LOGIN set) — run "beacon-agent login" later'
+  } else {
+    Write-Host '==> sign in (Microsoft SSO) to claim your spot on the board'
+    try { & $staging login } catch { Write-Host '==> sign-in skipped — run "beacon-agent login" anytime to attribute your usage' }
+  }
+}
 finally { Remove-Item $staging -Force -ErrorAction SilentlyContinue }

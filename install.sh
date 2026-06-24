@@ -71,4 +71,15 @@ chmod +x "$bin"
 echo "==> installing agent"
 "$bin" install
 
+# Sign in with Microsoft SSO to attribute your usage on the board — opens a browser,
+# mints BEACON_TOKEN, and bakes it into the agent. Skip with BEACON_NO_LOGIN=1 (e.g.
+# headless/CI); non-fatal — the agent still reports without it unless the board
+# requires a token, and you can run `beacon-agent login` anytime later.
+if [ -n "${BEACON_NO_LOGIN:-}" ]; then
+  echo "==> skipping sign-in (BEACON_NO_LOGIN set) — run 'beacon-agent login' later"
+else
+  echo "==> sign in (Microsoft SSO) to claim your spot on the board"
+  "$bin" login || echo "==> sign-in skipped — run 'beacon-agent login' anytime to attribute your usage"
+fi
+
 echo "==> optional: install the Beacon tray app from the GitHub Release for at-a-glance level + popover"
